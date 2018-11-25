@@ -2,6 +2,10 @@ const lib = require('lib')({token: 'u9JRrvf8NnMajPmDXq3XNNUyX9iYqhKSiQCIH86Lyb2P
 const Promise = require('bluebird');
 var reqProm = require('request-promise');
 
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 /**
  * @param {string} sender The phone number that sent the text to be handled
  * @param {string} receiver The StdLib phone number that received the SMS
@@ -9,10 +13,9 @@ var reqProm = require('request-promise');
  * @param {string} createdDatetime Datetime when the SMS was sent
  * @returns {any}
  */
-module.exports = async (sender, receiver, message, createdDatetime, context) => {
-  // module.exports = async (sender = '16472142176', receiver='16472142176', message='', createdDatetime='', context) => {
-  //     message = 'transit,L3R9E7,46 Linwood Avenue Scarborough'
-
+module.exports = async (sender , receiver, message, createdDatetime, context) => {
+    //message = 'UBER, 43.865980, -79.35769046, 33 Linwood Avenue Scarborough'
+    //module.exports = async (sender, receiver, message, createdDatetime, context) => {
   // let result = await lib.messagebird.tel.sms({
   //     originator: '12262860381',
   //     recipient: sender,
@@ -216,6 +219,167 @@ module.exports = async (sender, receiver, message, createdDatetime, context) => 
     });
     return res
   }
+  else if (split[0].toUpperCase() == 'UBER'){
+    let apikey = 'AIzaSyDBkFlNkBDZO78HHjofbA9-B91p2hHRFoA'
+    let uberkey = 'Bearer JA.VUNmGAAAAAAAEgASAAAABwAIAAwAAAAAAAAAEgAAAAAAAAG8AAAAFAAAAAAADgAQAAQAAAAIAAwAAAAOAAAAkAAAABwAAAAEAAAAEAAAAHeztO70nettOqmcb8_yUV5sAAAAMUe0A-AfEF9drpZq4Y1H0mjjXwSNAfYZ4bCvt9gqUVbdYLec2bkJUIwXxqxsMMITwQ7fYvVadOMCpf6CTdJEHRo1bTHBEJFUolwnJHHgE1kDOhzA4JRM4xjhEmy5jL-RmXUpkA0urnoRxm7CDAAAACqJj30wPiacpy0tiSQAAABiMGQ4NTgwMy0zOGEwLTQyYjMtODA2ZS03YTRjZjhlMTk2ZWU'
+    let lat = split[1];
+    let lon = split[2];
+    let dest = split[3];
+
+    let googlequery = 'https://maps.googleapis.com/maps/api/geocode/json?key=' + apikey +
+                      '&address=' + dest;
+
+    let query = await reqProm({               //wait for GET request
+        url: googlequery
+      }).then(function(q) {        //push response to next
+        return q
+      }).then(place =>{                         //where we do stuff with the body
+        place = JSON.parse(place)
+        let destlat = place.results[0].geometry.location.lat;
+        let destlon = place.results[0].geometry.location.lng;
+        let dest = {lat: destlat, lon: destlon};
+        return dest;
+      });
+
+      console.log(query);
+      let uberquery = 'https://sandbox-api.uber.com/v1.2/requests/estimate?'
+
+    let uberEstimate = await reqProm({
+      method: 'POST',
+      url: uberquery,
+      headers:{
+          authorization: uberkey
+      },
+      body: {
+        start_latitude: lat,
+	      start_longitude:lon,
+	      end_latitude: query.lat,
+	      end_longitude: query.lon
+      },
+      json: true
+    }).then(function(q){
+      let res = {
+        cost: q.fare.value,
+        fare_id: q.fare.fare_id,
+        time: q.trip.duration_estimate,
+        distance: q.trip.distance_estimate
+      }
+      return res;
+    })
+
+    console.log(uberEstimate);
+
+    let ridequery = 'https://sandbox-api.uber.com/v1.2/requests'
+
+    let uberRide = await reqProm({
+      method: 'POST',
+      url: ridequery,
+      headers:{
+          authorization: uberkey
+      },
+      body: {
+        start_latitude: lat,
+	      start_longitude:lon,
+	      end_latitude:query.lat,
+	      end_longitude:query.lon,
+        fare_id: uberEstimate.fare_id
+      },
+      json: true
+    }).then(function(q){
+      console.log(q);
+      return q;
+    });
+
+    let result = await lib.messagebird.tel.sms({
+      originator: '12262860381',
+      recipient: sender,
+      // recipient: '6479936121',
+      body: "Your request is processing. \n Fare estimate: $" + uberEstimate.cost +
+            "\n Distance: " + uberEstimate.distance + "miles" +
+            "\n Closest Driver: " + uberEstimate.time + "seconds"
+    });
+
+    // let acceptRide = 'https://sandbox-api.uber.com/v1.2/requests/' + uberRide.request_id;
+    // console.log(acceptRide);
+    // await reqProm({
+    //   method: 'PUT',
+    //   url: acceptRide,
+    //   headers:{
+    //       authorization: uberkey
+    //   },
+    //   body : {
+    //     status: "accepted"
+    //   },
+    //   json: true
+    // });
+    // console.log("now we here")
+    // await sleep(3000);
+    //
+    // let check = 'https://sandbox-api.uber.com/v1.2/requests/' + uberRide.request_id;
+    // let checkStatus = await reqProm({
+    //     method: 'GET',
+    //     url: check,
+    //     headers:{
+    //         authorization: uberkey
+    //     },
+    //     json: true
+    //   }).then(function(q){
+    //     console.log(q);
+    //     return q;
+    //   });
+
+      // let accept = await lib.messagebird.tel.sms({
+      //   originator: '12262860381',
+      //   recipient: sender,
+      //   // recipient: '6479936121',
+      //   body: "Your request is processing. \n Fare estimate: $" + uberEstimate.cost +
+      //         "\n Distance: " + uberEstimate.distance + "miles" +
+      //         "\n Closest Driver: " + uberEstimate.time + "seconds"
+      // });
+
+    let check = 'https://sandbox-api.uber.com/v1.2/requests/' + uberRide.request_id;
+    let stay = true;
+    let count = 0;
+
+    while (stay && count < 20){
+      await sleep(4000);
+      let checkStatus = await reqProm({
+        method: 'GET',
+        url: check,
+        headers:{
+            authorization: uberkey
+        },
+        json: true
+      }).then(function(q){
+        console.log(q);
+        return q;
+      });
+
+      if (checkStatus.status == "accepted"){
+        let res = await lib.messagebird.tel.sms({
+          originator: '12262860381',
+          recipient: sender,
+          // recipient: '6479936121',
+          body: "Your ride has been accepted!" +
+                "\n Driver: " + checkStatus.driver.name +
+                "\n Phone number: " + checkStatus.driver.phone_number +
+                "\n Rating: " + checkStatus.driver.rating +
+                "\n Car: " + checkStatus.vehicle.name + " " + checkStatus.vehicle.make +
+                "\n License Plate: " + checkStatus.vehicle.license_plate
+        });
+        stay = false;
+      }
+      else if (checkStatus.status == "rider_canceled"){
+        let res = await lib.messagebird.tel.sms({
+          originator: '12262860381',
+          recipient: sender,
+          // recipient: '6479936121',
+          body: "You have canceled your ride"
+        });
+      count++;
+    }
+  }
+}
   else if (split[0].toUpperCase() == 'HELP'){
     for (i = 0; i < split.length; i++){
       split[i] = split[i].replace(/ /g,"")
