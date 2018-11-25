@@ -39,7 +39,7 @@ module.exports = async (sender , receiver, message, createdDatetime, context) =>
       split[0] = 'driving'
     else if (split[0].toUpperCase() == 'WALK')
       split[0] = 'walking'        //changes app one to the mode used by the server
-    else if (split[0].toUpperCase() == 'PUBLIC')
+    else if (split[0].toUpperCase() == 'TRANSIT')
       split[0] = 'transit'
 
     let apikey = 'AIzaSyDBkFlNkBDZO78HHjofbA9-B91p2hHRFoA'
@@ -376,10 +376,11 @@ module.exports = async (sender , receiver, message, createdDatetime, context) =>
           // recipient: '6479936121',
           body: "You have canceled your ride"
         });
-      count++;
+        stay = false;
+      }
+    count++;
     }
   }
-}
   else if (split[0].toUpperCase() == 'HELP'){
     for (i = 0; i < split.length; i++){
       split[i] = split[i].replace(/ /g,"")
